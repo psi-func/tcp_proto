@@ -7,10 +7,70 @@ pub enum TcpState {
     Estab,
 }
 
-impl Default for TcpState {
+pub struct Connection {
+    state: TcpState,
+    send: SendSequenceSpace,
+    receive: RecvSequenceSpace,
+}
+
+/// RFC (793 S3.2 F4)
+///  Send Sequence Space
+///
+/// ```
+///                   1         2          3          4      
+///              ----------|----------|----------|----------
+///                     SND.UNA    SND.NXT    SND.UNA        
+///                                          +SND.WND        
+///
+///        1 - old sequence numbers which have been acknowledged  
+///        2 - sequence numbers of unacknowledged data            
+///        3 - sequence numbers allowed for new data transmission
+///        4 - future sequence numbers which are not yet allowed  
+/// ```
+struct SendSequenceSpace {
+    /// send unacknowledged
+    una: usize,
+    /// send next
+    nxt: usize,
+    /// send window
+    wnd: usize,
+    /// send urgent pointer
+    up: bool,
+    /// segment sequence number used for last window update
+    wl1: usize,
+    /// initial send sequence number
+    wl2: usize,
+}
+
+/// Receive Sequence Space (RFC 793 S3.2 F5)
+/// 
+/// 1          2          3      
+/// ----------|----------|---------- 
+///        RCV.NXT    RCV.NXT        
+///                  +RCV.WND        
+/// 
+/// 1 - old sequence numbers which have been acknowledged  
+/// 2 - sequence numbers allowed for new reception         
+/// 3 - future sequence numbers which are not yet allowed 
+struct RecvSequenceSpace {
+    /// receive next
+    nxt: usize,
+    /// receive window
+    wnd: usize,
+    /// receive urgent pointer
+    up: bool,
+    /// initial receive sequence number
+    irs: usize,
+}
+
+impl Default for Connection {
     fn default() -> Self {
         // TcpState::Closed
-        TcpState::Listen
+        Connection {
+            state: TcpState::Listen,
+            send : ,
+            receive : ,
+        }
     }
 }
 
@@ -26,12 +86,12 @@ impl TcpState {
 
         match *self {
             TcpState::Closed => {
-                return;
+                return Ok(0);
             }
             TcpState::Listen => {
                 if !tcph.syn() {
                     // only expected SYN packet
-                    return;
+                    return Ok(0);
                 }
 
                 // need to start establishing a connection
@@ -55,14 +115,16 @@ impl TcpState {
                 // write out headers
                 let unwritten = {
                     let mut unwritten = &mut buf[..];
-                    ip.write(unwritten);
-                    syn_ack.write(unwritten);
+                    ip.write(&mut unwritten);
+                    syn_ack.write(&mut unwritten);
                     unwritten.len()
-                }
+                };
 
                 nic.send(&buf[..unwritten]);
             }
-            _ => {}
+            _ => {
+                unimplemented!()
+            }
         }
 
         // println!(
